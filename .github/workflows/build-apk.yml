@@ -36,6 +36,43 @@ jobs:
         run: |
           npm ci || (echo "npm ci failed, regenerating package-lock.json..." && npm install)
 
+      - name: Create google-services.json if missing
+        run: |
+          if [ ! -f "google-services.json" ]; then
+            echo "Creating placeholder google-services.json for CI/CD build"
+            cat > google-services.json << 'EOF'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "tifto-seller-ci",
+              "storage_bucket": "tifto-seller-ci.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+                  "android_client_info": {
+                    "package_name": "com.tifto.seller"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDummyKeyForCIBuildOnly"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+          fi
+
       - name: Install EAS CLI
         run: npm install -g eas-cli
 
