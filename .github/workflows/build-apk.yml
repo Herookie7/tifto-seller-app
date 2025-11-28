@@ -80,7 +80,19 @@ jobs:
         run: npx expo prebuild --platform android --clean
 
       - name: Fix react-native-worklets-core CMakeLists.txt
-        run: node ./scripts/fix-worklets-cmake.js || echo "Fix script completed (may skip if already patched)"
+        run: |
+          echo "Running CMakeLists.txt fix script..."
+          node ./scripts/fix-worklets-cmake.js
+          echo "Verifying patch was applied..."
+          if [ -f "node_modules/react-native-worklets-core/android/CMakeLists.txt" ]; then
+            if grep -q "PATCHED: React Native 0.79+ fix" node_modules/react-native-worklets-core/android/CMakeLists.txt; then
+              echo "✅ Patch verified successfully"
+            else
+              echo "⚠️  Patch marker not found, but continuing..."
+            fi
+          else
+            echo "⚠️  CMakeLists.txt not found (may be normal)"
+          fi
 
       - name: Configure Gradle
         working-directory: ./android
