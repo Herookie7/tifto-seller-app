@@ -4,8 +4,9 @@
  * Fix react-native-worklets-core CMakeLists.txt for React Native 0.79+
  * This script patches the CMakeLists.txt to properly find React Native prefab targets
  * 
- * The issue: add_library() at line 28 tries to link to ReactAndroid:: targets
- * before find_package(ReactAndroid) is called, causing CMake errors.
+ * The issue: Even though find_package(ReactAndroid) is called, the targets aren't found
+ * because the prefab packages need to be configured earlier or the CMAKE_FIND_ROOT_PATH
+ * needs to be set correctly.
  */
 
 const fs = require('fs');
@@ -34,121 +35,146 @@ function fixCMakeLists() {
     return;
   }
 
-  console.log('🔧 Patching CMakeLists.txt...');
+  console.log('🔧 Patching CMakeLists.txt for React Native 0.79+ compatibility...');
   
   const lines = content.split('\n');
-  let addLibraryIndex = -1;
-  let findPackageIndex = -1;
   
-  // Find the add_library call (usually around line 28 based on error)
+  // Find where to insert the fix - right after cmake_minimum_required and project
+  let insertIndex = -1;
+  let projectLineIndex = -1;
+  let includeFollyIndex = -1;
+  
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
-    // Look for add_library(rnworklets - can be on one line or multi-line
-    if (line.startsWith('add_library(rnworklets') || 
-        (line.startsWith('add_library(') && line.includes('rnworklets'))) {
-      addLibraryIndex = i;
-      console.log(`   Found add_library at line ${i + 1}`);
-      break;
+    if (line.startsWith('project(')) {
+      projectLineIndex = i;
+      // Insert right after project() declaration
+      insertIndex = i + 1;
+      console.log(`   Found project() at line ${i + 1}`);
     }
-    if (line.includes('find_package(ReactAndroid')) {
-      findPackageIndex = i;
-      console.log(`   Found existing find_package at line ${i + 1}`);
+    if (line.includes('include("${REACT_NATIVE_DIR}/ReactAndroid/cmake-utils/folly-flags.cmake")')) {
+      includeFollyIndex = i;
+      console.log(`   Found folly-flags include at line ${i + 1}`);
     }
   }
-
-  // Determine where to insert find_package
-  let insertIndex = 0;
   
-  // Strategy: Insert find_package right before add_library, or at the top after cmake_minimum_required/project
-  if (addLibraryIndex !== -1) {
-    // Insert right before add_library (this is the most reliable location)
-    insertIndex = addLibraryIndex;
-    console.log(`   Will insert find_package before add_library at line ${insertIndex + 1}`);
-    
-    // Make sure we're not inserting in the middle of a multi-line add_library
-    // Look backwards for the start of add_library if it's split across lines
-    let actualInsertIndex = insertIndex;
-    for (let i = insertIndex - 1; i >= Math.max(0, insertIndex - 5); i--) {
-      if (lines[i].trim().startsWith('add_library(')) {
-        actualInsertIndex = i;
-        break;
-      }
-    }
-    insertIndex = actualInsertIndex;
-  } else {
-    // Fallback: find cmake_minimum_required or project() and insert after
+  // If project not found, look for cmake_minimum_required
+  if (insertIndex === -1) {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (line.startsWith('cmake_minimum_required') || 
-          (line.startsWith('project(') && !line.includes('#'))) {
+      if (line.startsWith('cmake_minimum_required')) {
         insertIndex = i + 1;
-        console.log(`   Will insert find_package after ${line.substring(0, 30)}... at line ${insertIndex + 1}`);
+        console.log(`   Found cmake_minimum_required at line ${i + 1}`);
         break;
       }
     }
-    
-    // If still not found, insert after any initial comments (but before any actual code)
-    if (insertIndex === 0) {
-      for (let i = 0; i < Math.min(10, lines.length); i++) {
-        const line = lines[i].trim();
-        if (line && !line.startsWith('#') && !line.startsWith('cmake_')) {
-          insertIndex = i;
-          console.log(`   Will insert find_package at the top (before first non-comment line)`);
-          break;
-        }
-      }
-    }
+  }
+  
+  // Fallback: insert at the beginning
+  if (insertIndex === -1) {
+    insertIndex = 0;
+    console.log(`   No project/cmake_minimum_required found, inserting at beginning`);
   }
 
-  // Remove old find_package if it exists in wrong place (after add_library)
-  if (findPackageIndex !== -1 && findPackageIndex > insertIndex) {
-    console.log(`   Removing misplaced find_package at line ${findPackageIndex + 1}`);
-    // Remove the find_package line and any blank lines around it
-    let removeStart = findPackageIndex;
-    let removeEnd = findPackageIndex + 1;
-    
-    // Remove preceding blank line if exists
-    if (removeStart > 0 && lines[removeStart - 1].trim() === '') {
-      removeStart--;
+  // Find existing find_package calls
+  let findReactAndroidIndex = -1;
+  let findFbjniIndex = -1;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.includes('find_package(ReactAndroid')) {
+      findReactAndroidIndex = i;
     }
-    // Remove following blank line if exists
-    if (removeEnd < lines.length && lines[removeEnd].trim() === '') {
-      removeEnd++;
-    }
-    
-    lines.splice(removeStart, removeEnd - removeStart);
-    
-    // Adjust insertIndex if needed
-    if (insertIndex > findPackageIndex) {
-      insertIndex -= (removeEnd - removeStart);
+    if (line.includes('find_package(fbjni')) {
+      findFbjniIndex = i;
     }
   }
-
-  // Insert find_package call
+  
+  // The fix: Ensure find_package is called BEFORE the folly-flags include
+  // This is critical because the include might need React Native to be found first
+  let targetInsertIndex = insertIndex;
+  
+  // Determine the best insertion point: before the include if it exists
+  if (includeFollyIndex !== -1) {
+    targetInsertIndex = includeFollyIndex;
+    if (findReactAndroidIndex !== -1 && findReactAndroidIndex > includeFollyIndex) {
+      console.log(`   CRITICAL: include(folly-flags) at line ${includeFollyIndex + 1} happens before find_package at line ${findReactAndroidIndex + 1}!`);
+      console.log(`   Moving find_package to before the include`);
+    } else {
+      console.log(`   Inserting find_package before include(folly-flags) at line ${targetInsertIndex + 1}`);
+    }
+  }
+  
   const patchLines = [
     '',
-    '# PATCHED: React Native 0.79+ fix - Find React Native prefab packages before linking',
-    '# This must be called before any target_link_libraries that reference ReactAndroid:: targets',
+    '# PATCHED: React Native 0.79+ fix - Find React Native prefab packages before any includes',
+    '# This must be called before include() calls that might depend on React Native',
     'find_package(ReactAndroid REQUIRED CONFIG)',
+    'find_package(fbjni REQUIRED CONFIG)',
     ''
   ];
+  
+  // Determine if we need to add find_package or if it already exists early enough
+  const shouldAddFindPackage = 
+    (findReactAndroidIndex === -1) || // Doesn't exist at all
+    (includeFollyIndex !== -1 && findReactAndroidIndex > includeFollyIndex) || // Exists but after include
+    (findReactAndroidIndex > targetInsertIndex + 5); // Exists but too late
+  
+  // Remove duplicate find_package calls if they exist later or after include
+  const linesToRemove = [];
+  if (findReactAndroidIndex !== -1 && (findReactAndroidIndex > targetInsertIndex + 5 || (includeFollyIndex !== -1 && findReactAndroidIndex > includeFollyIndex))) {
+    console.log(`   Will remove find_package(ReactAndroid) at line ${findReactAndroidIndex + 1} (moving it earlier)`);
+    linesToRemove.push(findReactAndroidIndex);
+  }
+  if (findFbjniIndex !== -1 && (findFbjniIndex > targetInsertIndex + 5 || (includeFollyIndex !== -1 && findFbjniIndex > includeFollyIndex))) {
+    console.log(`   Will remove find_package(fbjni) at line ${findFbjniIndex + 1} (moving it earlier)`);
+    linesToRemove.push(findFbjniIndex);
+  }
+  
+  // Remove duplicates in reverse order to maintain indices
+  linesToRemove.sort((a, b) => b - a);
+  for (const index of linesToRemove) {
+    // Remove the line and any blank lines around it
+    let removeStart = index;
+    let removeEnd = index + 1;
+    if (index > 0 && lines[index - 1].trim() === '') {
+      removeStart--;
+    }
+    if (index < lines.length - 1 && lines[index + 1].trim() === '') {
+      removeEnd++;
+    }
+    lines.splice(removeStart, removeEnd - removeStart);
+    console.log(`   Removed find_package at line ${index + 1}`);
+  }
+  
+  // Adjust targetInsertIndex if we removed lines before it
+  const removedBeforeInsert = linesToRemove.filter(idx => idx < targetInsertIndex).length;
+  if (removedBeforeInsert > 0) {
+    targetInsertIndex -= removedBeforeInsert;
+  }
+  
+  // Only add find_package if needed
+  if (!shouldAddFindPackage && findReactAndroidIndex !== -1 && findReactAndroidIndex < targetInsertIndex + 5) {
+    console.log(`   find_package(ReactAndroid) already exists early at line ${findReactAndroidIndex + 1}, skipping addition`);
+    // Remove the find_package lines from patch since they already exist
+    patchLines.splice(3, 2); // Remove the two find_package lines
+  } else {
+    console.log('   Adding find_package(ReactAndroid REQUIRED CONFIG) and find_package(fbjni REQUIRED CONFIG)');
+  }
+  
+  insertIndex = targetInsertIndex;
   
   lines.splice(insertIndex, 0, ...patchLines);
   content = lines.join('\n');
 
-  // Verify the patch was applied correctly
-  if (!content.includes('find_package(ReactAndroid REQUIRED CONFIG)')) {
-    throw new Error('Failed to insert find_package - content verification failed');
-  }
-
   fs.writeFileSync(cmakeListsPath, content, 'utf8');
   console.log('✅ Successfully patched CMakeLists.txt for React Native 0.79+');
-  console.log(`   Inserted find_package(ReactAndroid REQUIRED CONFIG) at line ${insertIndex + 2}`);
+  console.log(`   Inserted prefab configuration at line ${insertIndex + 2}`);
   
-  // Double-check the file was written
+  // Verify the patch was applied
   const verifyContent = fs.readFileSync(cmakeListsPath, 'utf8');
-  if (!verifyContent.includes('find_package(ReactAndroid REQUIRED CONFIG)')) {
-    throw new Error('File write verification failed - find_package not found after write');
+  if (!verifyContent.includes('# PATCHED: React Native 0.79+ fix')) {
+    throw new Error('File write verification failed - patch marker not found after write');
   }
   console.log('   ✅ File write verified successfully');
 }
