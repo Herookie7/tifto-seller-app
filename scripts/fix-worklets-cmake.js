@@ -128,6 +128,7 @@ function fixCMakeLists() {
   const patchLines = [
     '',
     '# PATCHED: React Native 0.79+ fix - Find React Native prefab packages before linking',
+    '# This must be called before any target_link_libraries that reference ReactAndroid:: targets',
     'find_package(ReactAndroid REQUIRED CONFIG)',
     ''
   ];
@@ -135,9 +136,21 @@ function fixCMakeLists() {
   lines.splice(insertIndex, 0, ...patchLines);
   content = lines.join('\n');
 
+  // Verify the patch was applied correctly
+  if (!content.includes('find_package(ReactAndroid REQUIRED CONFIG)')) {
+    throw new Error('Failed to insert find_package - content verification failed');
+  }
+
   fs.writeFileSync(cmakeListsPath, content, 'utf8');
   console.log('✅ Successfully patched CMakeLists.txt for React Native 0.79+');
   console.log(`   Inserted find_package(ReactAndroid REQUIRED CONFIG) at line ${insertIndex + 2}`);
+  
+  // Double-check the file was written
+  const verifyContent = fs.readFileSync(cmakeListsPath, 'utf8');
+  if (!verifyContent.includes('find_package(ReactAndroid REQUIRED CONFIG)')) {
+    throw new Error('File write verification failed - find_package not found after write');
+  }
+  console.log('   ✅ File write verified successfully');
 }
 
 try {
