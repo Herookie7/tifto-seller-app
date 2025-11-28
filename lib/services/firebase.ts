@@ -2,12 +2,12 @@ import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyA-Arn9vDqHen1EJimV8lJfNsYOBLNcIfg",
-  authDomain: "tifto.firebaseapp.com",
-  projectId: "tifto",
-  storageBucket: "tifto.appspot.com",
-  messagingSenderId: "650001300965",
-  appId: "1:650001300965:android:e027e6c5c2074a426bc30c",
+  apiKey: "AIzaSyCmiC7sAVx5DjMPACwci-L74qww3uNxna4",
+  authDomain: "tifto-prod.firebaseapp.com",
+  projectId: "tifto-prod",
+  storageBucket: "tifto-prod.firebasestorage.app",
+  messagingSenderId: "253211113708",
+  appId: "1:253211113708:android:95736dc4af620e46698dc9",
 };
 
 let firebaseApp;

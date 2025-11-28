@@ -1,8 +1,8 @@
 {
   "project_info": {
-    "project_number": "PLACEHOLDER",
-    "project_id": "tifto-seller",
-    "storage_bucket": "tifto-seller.appspot.com"
+    "project_number": "253211113708",
+    "project_id": "tifto-prod",
+    "storage_bucket": "tifto-prod.firebasestorage.app"
   },
   "client": [
     {
