@@ -32,6 +32,13 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Setup napi-postinstall wrapper
+        run: |
+          mkdir -p node_modules/.bin
+          node ./scripts/setup-napi-postinstall.js
+          chmod +x node_modules/.bin/napi-postinstall || true
+          echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
+
       - name: Install dependencies
         run: |
           npm ci || (echo "npm ci failed, regenerating package-lock.json..." && npm install)
