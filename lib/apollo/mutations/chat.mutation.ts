@@ -9,7 +9,7 @@ export const SEND_CHAT_MESSAGE = gql`
         id
         message
         user {
-          id
+          _id
           name
         }
         createdAt

@@ -11,7 +11,6 @@ import {
 import { WebSocketLink } from "@apollo/client/link/ws";
 import { getMainDefinition } from "@apollo/client/utilities";
 
-import getEnvVars from "@/environment";
 import * as SecureStore from "expo-secure-store";
 import { DefinitionNode, FragmentDefinitionNode } from "graphql";
 import { Subscription } from "zen-observable-ts";
@@ -55,9 +54,7 @@ const getAuthorizationToken = async (): Promise<string | null> => {
   return null;
 };
 
-const setupApollo = () => {
-  const { GRAPHQL_URL, WS_GRAPHQL_URL } = getEnvVars();
-
+const setupApollo = (GRAPHQL_URL: string, WS_GRAPHQL_URL: string) => {
   const wsLink = new WebSocketLink({
     uri: WS_GRAPHQL_URL,
     options: {
@@ -66,7 +63,7 @@ const setupApollo = () => {
         const token = getCachedAuthToken();
         if (token) {
           return {
-            Authorization: `Bearer ${token}`,
+            authorization: `Bearer ${token}`,
           };
         }
         return {};

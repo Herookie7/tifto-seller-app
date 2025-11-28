@@ -66,7 +66,6 @@ export const STORE_PROFILE = gql`
   query Restaurant($restaurantId: String!) {
     restaurant(id: $restaurantId) {
       _id
-      unique_restaurant_id
       orderId
       orderPrefix
       name
@@ -110,10 +109,8 @@ export const STORE_ORDERS = gql`
     restaurantOrders {
       _id
       orderId
-      id
       restaurant {
         _id
-
         name
         image
         address
@@ -131,24 +128,20 @@ export const STORE_ORDERS = gql`
       }
       items {
         _id
-        id
         title
         description
         image
         quantity
         variation {
           _id
-          id
           title
           price
           discounted
         }
         addons {
           _id
-          id
           options {
             _id
-            id
             title
             description
             price

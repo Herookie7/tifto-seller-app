@@ -8,7 +8,7 @@ export const CHAT = gql`
       message
       createdAt
       user {
-        id
+        _id
         name
       }
     }

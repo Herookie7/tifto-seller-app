@@ -62,7 +62,7 @@ export const isProduction = () => {
   return PRODUCTION_CHANNELS.includes(resolveChannel());
 };
 
-const getEnvVars = () => {
+const useGetEnvVars = () => {
   const configuration = useContext(ConfigurationContext);
 
   const shared = useMemo(
@@ -91,4 +91,4 @@ const getEnvVars = () => {
   };
 };
 
-export default getEnvVars;
+export default useGetEnvVars;

@@ -17,15 +17,15 @@ export const phoneExist = `#graphql
   }`;
 
 export const sendOtpToEmail = `#graphql
-  mutation SendOtpToEmail($email: String!, $otp: String!) {
-    sendOtpToEmail(email: $email, otp: $otp) {
+  mutation SendOtpToEmail($email: String!) {
+    sendOtpToEmail(email: $email) {
       result
     }
   }
   `;
 export const sendOtpToPhoneNumber = `#graphql
-  mutation SendOtpToPhoneNumber($phone: String!, $otp: String!) {
-    sendOtpToPhoneNumber(phone: $phone, otp: $otp) {
+  mutation SendOtpToPhoneNumber($phone: String!) {
+    sendOtpToPhoneNumber(phone: $phone) {
       result
     }
   }
@@ -52,8 +52,8 @@ export const login = `#graphql
   }
   `;
 export const forgotPassword = `#graphql
-mutation ForgotPassword($email:String!,$otp:String!){
-    forgotPassword(email:$email,otp:$otp){
+mutation ForgotPassword($email:String!){
+    forgotPassword(email:$email){
       result
     }
   }`;

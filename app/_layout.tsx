@@ -4,6 +4,7 @@ import "react-native-reanimated";
 
 // Service
 import setupApollo from "@/lib/apollo";
+import useGetEnvVars from "@/environment";
 
 // Providers
 import { AuthProvider } from "@/lib/context/global/auth.context";
@@ -50,7 +51,8 @@ function RootLayout() {
     Inter: require("../lib/assets/fonts/Inter.ttf"),
   });
 
-  const client = setupApollo();
+  const { GRAPHQL_URL, WS_GRAPHQL_URL } = useGetEnvVars();
+  const client = setupApollo(GRAPHQL_URL, WS_GRAPHQL_URL);
 
   // Use Effect
   useEffect(() => {

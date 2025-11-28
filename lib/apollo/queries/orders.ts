@@ -5,10 +5,8 @@ export const GET_ORDERS = gql`
     restaurantOrders {
       _id
       orderId
-      id
       restaurant {
         _id
-
         name
         image
         address
@@ -26,7 +24,6 @@ export const GET_ORDERS = gql`
       }
       items {
         _id
-        id
         title
         description
         image
@@ -35,17 +32,14 @@ export const GET_ORDERS = gql`
 
         variation {
           _id
-          id
           title
           price
           discounted
         }
         addons {
           _id
-          id
           options {
             _id
-            id
             title
             description
             price
