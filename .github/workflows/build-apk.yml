@@ -79,6 +79,9 @@ jobs:
       - name: Generate Android native code
         run: npx expo prebuild --platform android --clean
 
+      - name: Fix react-native-worklets-core CMakeLists.txt
+        run: node ./scripts/fix-worklets-cmake.js || echo "Fix script completed (may skip if already patched)"
+
       - name: Configure Gradle
         working-directory: ./android
         run: |
