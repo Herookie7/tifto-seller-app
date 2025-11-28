@@ -1,14 +1,9 @@
 name: Build Android APK
 
 on:
-  workflow_dispatch:  # Allows manual triggering
   push:
     branches:
-      - main
-      - master
-    paths:
-      - '**'
-      - '.github/workflows/build-apk.yml'
+      - '**'  # Trigger on push to any branch
 
 jobs:
   build:
@@ -48,36 +43,36 @@ jobs:
           if [ ! -f "google-services.json" ]; then
             echo "Creating placeholder google-services.json for CI/CD build"
             cat > google-services.json << 'EOF'
-          {
-            "project_info": {
-              "project_number": "000000000000",
-              "project_id": "tifto-seller-ci",
-              "storage_bucket": "tifto-seller-ci.appspot.com"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
-                  "android_client_info": {
-                    "package_name": "com.tifto.seller"
-                  }
-                },
-                "oauth_client": [],
-                "api_key": [
-                  {
-                    "current_key": "AIzaSyDummyKeyForCIBuildOnly"
-                  }
-                ],
-                "services": {
-                  "appinvite_service": {
-                    "other_platform_oauth_client": []
-                  }
-                }
-              }
-            ],
-            "configuration_version": "1"
-          }
-          EOF
+{
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "tifto-seller-ci",
+    "storage_bucket": "tifto-seller-ci.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "android_client_info": {
+          "package_name": "com.tifto.seller"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDummyKeyForCIBuildOnly"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
+EOF
           fi
 
       - name: Install EAS CLI
@@ -107,26 +102,16 @@ jobs:
           chmod +x gradlew
           ./gradlew --version
 
-      - name: Build APK (Release - Production)
+      - name: Build APK (Release)
         working-directory: ./android
         run: |
           ./gradlew assembleRelease --no-daemon
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
+          name: tifto-seller-app-release
           path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
           if-no-files-found: error
-
-      - name: Build APK (Release) - Optional
-        if: false  # Set to true if you want release builds
-        working-directory: ./android
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          # This requires keystore setup - uncomment if needed
-          # ./gradlew assembleRelease --no-daemon
 
