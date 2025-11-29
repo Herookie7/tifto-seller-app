@@ -1,9 +1,14 @@
 name: Build Android APK
 
 on:
+  workflow_dispatch:  # Allows manual triggering
   push:
     branches:
-      - '**'  # Trigger on push to any branch
+      - main
+      - master
+    paths:
+      - '**'
+      - '.github/workflows/build-apk.yml'
 
 jobs:
   build:
@@ -27,16 +32,20 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup napi-postinstall wrapper
-        run: |
-          mkdir -p node_modules/.bin
-          node ./scripts/setup-napi-postinstall.js
-          chmod +x node_modules/.bin/napi-postinstall || true
-          echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
-
       - name: Install dependencies
         run: |
           npm ci || (echo "npm ci failed, regenerating package-lock.json..." && npm install)
+
+      - name: Setup napi-postinstall wrapper
+        run: |
+          if [ -f "scripts/setup-napi-postinstall.js" ]; then
+            mkdir -p node_modules/.bin
+            node ./scripts/setup-napi-postinstall.js || true
+            chmod +x node_modules/.bin/napi-postinstall || true
+            echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
+          else
+            echo "⚠️  setup-napi-postinstall.js not found, skipping..."
+          fi
 
       - name: Create google-services.json if missing
         run: |
@@ -83,17 +92,21 @@ EOF
 
       - name: Fix react-native-worklets-core CMakeLists.txt
         run: |
-          echo "Running CMakeLists.txt fix script..."
-          node ./scripts/fix-worklets-cmake.js
-          echo "Verifying patch was applied..."
-          if [ -f "node_modules/react-native-worklets-core/android/CMakeLists.txt" ]; then
-            if grep -q "PATCHED: React Native 0.79+ fix" node_modules/react-native-worklets-core/android/CMakeLists.txt; then
-              echo "✅ Patch verified successfully"
+          if [ -f "scripts/fix-worklets-cmake.js" ]; then
+            echo "Running CMakeLists.txt fix script..."
+            node ./scripts/fix-worklets-cmake.js || true
+            echo "Verifying patch was applied..."
+            if [ -f "node_modules/react-native-worklets-core/android/CMakeLists.txt" ]; then
+              if grep -q "PATCHED: React Native 0.79+ fix" node_modules/react-native-worklets-core/android/CMakeLists.txt; then
+                echo "✅ Patch verified successfully"
+              else
+                echo "⚠️  Patch marker not found, but continuing..."
+              fi
             else
-              echo "⚠️  Patch marker not found, but continuing..."
+              echo "⚠️  CMakeLists.txt not found (may be normal)"
             fi
           else
-            echo "⚠️  CMakeLists.txt not found (may be normal)"
+            echo "⚠️  fix-worklets-cmake.js not found, skipping..."
           fi
 
       - name: Configure Gradle
