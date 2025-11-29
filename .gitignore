@@ -4,12 +4,11 @@
 node_modules/
 
 # Secrets
-google-servicees.json
+google-services.json
 google-service-account.json
 google-service-account copy.json
 # Note: google-services.json is required for builds but should not be committed
 # Use google-services.json.template as reference
-# google-services.json
 
 # Expo
 .expo/
