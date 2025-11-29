@@ -34,11 +34,10 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install dependencies
-        run: |
-          npm ci || (echo "npm ci failed, regenerating package-lock.json..." && npm install)
+      - name: Install @napi-rs/cli globally
+        run: npm install -g @napi-rs/cli
 
-      - name: Setup napi-postinstall wrapper
+      - name: Setup napi-postinstall wrapper (before install)
         run: |
           if [ -f "scripts/setup-napi-postinstall.js" ]; then
             mkdir -p node_modules/.bin
@@ -48,6 +47,10 @@ jobs:
           else
             echo "⚠️  setup-napi-postinstall.js not found, skipping..."
           fi
+
+      - name: Install dependencies
+        run: |
+          npm ci || (echo "npm ci failed, regenerating package-lock.json..." && npm install)
 
       - name: Setup google-services.json
         env:
