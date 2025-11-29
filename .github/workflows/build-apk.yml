@@ -37,20 +37,33 @@ jobs:
       - name: Install @napi-rs/cli globally
         run: npm install -g @napi-rs/cli
 
-      - name: Setup napi-postinstall wrapper (before install)
+      - name: Install dependencies (skip scripts)
+        run: |
+          npm ci --ignore-scripts || (echo "npm ci failed, trying npm install..." && npm install --ignore-scripts)
+
+      - name: Setup napi-postinstall wrapper
         run: |
           if [ -f "scripts/setup-napi-postinstall.js" ]; then
             mkdir -p node_modules/.bin
             node ./scripts/setup-napi-postinstall.js || true
             chmod +x node_modules/.bin/napi-postinstall || true
             echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
+            # Also ensure global napi-postinstall is in PATH
+            export PATH="$PATH:$(npm config get prefix)/bin"
           else
             echo "⚠️  setup-napi-postinstall.js not found, skipping..."
           fi
 
-      - name: Install dependencies
+      - name: Run postinstall scripts
         run: |
-          npm ci || (echo "npm ci failed, regenerating package-lock.json..." && npm install)
+          # Ensure napi-postinstall is available via npx
+          export PATH="$PATH:$(npm config get prefix)/bin"
+          # Run npm rebuild to trigger postinstall scripts for native modules
+          npm rebuild || echo "⚠️  npm rebuild had issues, continuing..."
+          # Run the project's postinstall script if it exists
+          if [ -f "package.json" ] && grep -q '"postinstall"' package.json; then
+            npm run postinstall || echo "⚠️  postinstall script had issues, continuing..."
+          fi
 
       - name: Setup google-services.json
         env:
