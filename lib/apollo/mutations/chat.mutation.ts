@@ -6,7 +6,7 @@ export const SEND_CHAT_MESSAGE = gql`
       success
       message
       data {
-        id
+        _id
         message
         user {
           _id

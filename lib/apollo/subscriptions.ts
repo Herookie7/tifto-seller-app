@@ -92,12 +92,12 @@ export const SUBSCRIBE_PLACE_ORDER = gql`
 export const SUBSCRIPTION_NEW_MESSAGE = gql`
   subscription SubscriptionNewMessage($order: String!) {
     subscriptionNewMessage(order: $order) {
-      id
+      _id
       orderId
       message
       createdAt
       user {
-        id
+        _id
         name
       }
     }

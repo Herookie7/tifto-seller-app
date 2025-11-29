@@ -52,7 +52,7 @@ export const reviewOrder = gql`
           coordinates
         }
         deliveryAddress
-        id
+        _id
       }
       items {
         _id
@@ -129,7 +129,7 @@ export const placeOrder = `#graphql
       deliveryAddress{
         location{coordinates}
         deliveryAddress
-        id
+        _id
       }
       items{
         _id

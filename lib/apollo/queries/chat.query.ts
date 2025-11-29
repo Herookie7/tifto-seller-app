@@ -3,7 +3,7 @@ import { gql } from "@apollo/client";
 export const CHAT = gql`
   query Chat($order: String!) {
     chat(order: $order) {
-      id
+      _id
       orderId
       message
       createdAt

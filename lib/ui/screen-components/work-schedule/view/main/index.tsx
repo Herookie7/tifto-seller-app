@@ -358,9 +358,23 @@ export default function WorkScheduleMain() {
           day: daySchedule.day || null,
           times: daySchedule.times?.length
             ? daySchedule.times.map((slot) => {
+                // Handle both string ("08:00") and array (["08", "00"]) formats
+                const startTimeStr = Array.isArray(slot.startTime)
+                  ? slot.startTime.join(":")
+                  : slot.startTime || "09:00";
+                const endTimeStr = Array.isArray(slot.endTime)
+                  ? slot.endTime.join(":")
+                  : slot.endTime || "17:00";
+
+                // Split the string properly to get hours and minutes
                 const [startHours = "09", startMinutes = "00"] =
-                  slot.startTime || [];
-                const [endHours = "17", endMinutes = "00"] = slot.endTime || [];
+                  typeof startTimeStr === "string"
+                    ? startTimeStr.split(":")
+                    : ["09", "00"];
+                const [endHours = "17", endMinutes = "00"] =
+                  typeof endTimeStr === "string"
+                    ? endTimeStr.split(":")
+                    : ["17", "00"];
 
                 return {
                   startTime: [startHours, startMinutes],
