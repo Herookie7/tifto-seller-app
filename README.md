@@ -104,3 +104,32 @@ Choose the relevant runtime from the Metro prompt (Expo Go, iOS simulator, Andro
   Provide an Expo project ID and test with an actual device. The backend stores notification tokens via `restaurantLogin`.
 
 For further backend details, see `../tifto-backend/README.md`.
+
+---
+
+## Building APK
+
+### Option 1: GitHub Actions (Recommended)
+
+The easiest way to build an APK is using GitHub Actions workflows:
+
+1. **Build APK Only**
+   - Go to **Actions** tab in GitHub
+   - Select **"Build Android APK"** workflow
+   - Click **"Run workflow"**
+   - Download the APK from the **Artifacts** section after completion
+
+2. **Build APK and Create Release**
+   - Go to **Actions** tab in GitHub
+   - Select **"Build APK and Create Release"** workflow
+   - Click **"Run workflow"**
+   - Fill in tag name (e.g., `v1.0.62`) and release details
+   - The APK will be attached to a new GitHub Release
+
+📖 **Full documentation:** See [`.github/GITHUB_WORKFLOWS_README.md`](.github/GITHUB_WORKFLOWS_README.md)
+
+### Option 2: Local Build
+
+For local builds, see [`BUILD_APK_INSTRUCTIONS.md`](BUILD_APK_INSTRUCTIONS.md)
+
+---

@@ -1,0 +1,174 @@
+name: Build APK and Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag name (e.g., v1.0.62)'
+        required: true
+        default: 'v1.0.62'
+      release_name:
+        description: 'Release name'
+        required: false
+        default: 'Tifto Seller App Release'
+      release_notes:
+        description: 'Release notes (markdown supported)'
+        required: false
+        default: 'New release of Tifto Seller App'
+      draft:
+        description: 'Create as draft release?'
+        required: false
+        default: false
+        type: boolean
+      prerelease:
+        description: 'Create as pre-release?'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build-and-release:
+    name: Build APK and Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to create releases
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📦 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.18.0'
+          cache: 'npm'
+
+      - name: ☕ Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 🤖 Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 🔧 Install global dependencies
+        run: |
+          npm install -g @napi-rs/cli eas-cli@latest
+
+      - name: 📋 Install project dependencies
+        run: |
+          npm ci
+
+      - name: 🔐 Setup google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -f "google-services.json" ]; then
+            echo "✅ Using existing google-services.json"
+          elif [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "✅ Creating google-services.json from GitHub Secret"
+            echo "$GOOGLE_SERVICES_JSON" > google-services.json
+          else
+            echo "⚠️  Creating placeholder google-services.json"
+            echo '{"project_info":{"project_number":"000000000000","project_id":"tifto-seller-ci","storage_bucket":"tifto-seller-ci.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000000000","android_client_info":{"package_name":"com.tifto.seller"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyDummyKeyForCIBuildOnly"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > google-services.json
+          fi
+          cp google-services.json android/app/google-services.json 2>/dev/null || true
+
+      - name: 🏗️ Generate Android native code
+        run: npx expo prebuild --platform android --clean
+
+      - name: 🔧 Fix react-native-worklets-core CMakeLists.txt
+        run: |
+          if [ -f "scripts/fix-worklets-cmake.js" ]; then
+            node ./scripts/fix-worklets-cmake.js || true
+          fi
+
+      - name: 📝 Create local.properties
+        working-directory: ./android
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: 🏭 Build Release APK
+        working-directory: ./android
+        env:
+          NPM_CONFIG_LEGACY_PEER_DEPS: "true"
+          CI: "true"
+        run: |
+          ./gradlew assembleRelease --no-daemon
+
+      - name: 📦 Prepare APK for release
+        id: apk-info
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" -type f | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "❌ APK not found!"
+            exit 1
+          fi
+          
+          # Get version info
+          VERSION=$(grep -o '"version": "[^"]*"' app.json | cut -d'"' -f4)
+          VERSION_CODE=$(grep -o '"versionCode": [0-9]*' app.json | grep -o '[0-9]*')
+          
+          # Create release filename
+          RELEASE_FILENAME="tifto-seller-app-v${VERSION}-${VERSION_CODE}.apk"
+          cp "$APK_PATH" "$RELEASE_FILENAME"
+          
+          APK_SIZE=$(stat -c%s "$RELEASE_FILENAME" 2>/dev/null || stat -f%z "$RELEASE_FILENAME" 2>/dev/null)
+          
+          echo "apk-path=$RELEASE_FILENAME" >> $GITHUB_OUTPUT
+          echo "apk-size=$APK_SIZE" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version-code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          
+          echo "✅ APK prepared: $RELEASE_FILENAME"
+          echo "📦 Size: $(numfmt --to=iec-i --suffix=B $APK_SIZE 2>/dev/null || echo "${APK_SIZE} bytes")"
+
+      - name: 🏷️ Create Git Tag
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          TAG_NAME="${{ github.event.inputs.tag_name }}"
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "⚠️  Tag $TAG_NAME already exists, skipping tag creation"
+          else
+            git tag -a "$TAG_NAME" -m "Release $TAG_NAME - ${{ github.event.inputs.release_name }}"
+            git push origin "$TAG_NAME"
+            echo "✅ Created and pushed tag: $TAG_NAME"
+          fi
+
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.tag_name }}
+          name: ${{ github.event.inputs.release_name }}
+          body: |
+            ${{ github.event.inputs.release_notes }}
+            
+            ---
+            
+            ### 📦 Release Information
+            - **Version:** ${{ steps.apk-info.outputs.version }}
+            - **Version Code:** ${{ steps.apk-info.outputs.version-code }}
+            - **Package:** com.tifto.seller
+            - **APK Size:** ${{ steps.apk-info.outputs.apk-size }} bytes
+            
+            ### 📥 Installation
+            1. Download the APK file below
+            2. Enable "Install from Unknown Sources" on your Android device
+            3. Install the APK
+            
+          files: ${{ steps.apk-info.outputs.apk-path }}
+          draft: ${{ github.event.inputs.draft }}
+          prerelease: ${{ github.event.inputs.prerelease }}
+          generate_release_notes: true
+
+      - name: ✅ Release Summary
+        run: |
+          echo "## 🎉 Release Created Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag:** \`${{ github.event.inputs.tag_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**APK:** \`${{ steps.apk-info.outputs.apk-path }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.apk-info.outputs.version }} (${{ steps.apk-info.outputs.version-code }})" >> $GITHUB_STEP_SUMMARY
+

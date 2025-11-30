@@ -1,7 +1,7 @@
 name: Build Android APK
 
 on:
-  workflow_dispatch:  # Allows manual triggering
+  workflow_dispatch:  # Allows manual triggering from GitHub Actions UI
   push:
     branches:
       - main
@@ -10,62 +10,45 @@ on:
       - '**.md'
       - '.gitignore'
       - 'README.md'
+      - 'BUILD_APK_INSTRUCTIONS.md'
+  pull_request:
+    branches:
+      - main
+      - master
 
 jobs:
   build:
+    name: Build Release APK
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: 📦 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '20.18.0'  # Match eas.json requirement
           cache: 'npm'
 
-      - name: Setup Java
+      - name: ☕ Setup Java JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Android SDK
+      - name: 🤖 Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install @napi-rs/cli globally
-        run: npm install -g @napi-rs/cli
-
-      - name: Install dependencies (skip scripts)
+      - name: 🔧 Install global dependencies
         run: |
-          npm ci --ignore-scripts || (echo "npm ci failed, trying npm install..." && npm install --ignore-scripts)
+          npm install -g @napi-rs/cli eas-cli@latest
 
-      - name: Setup napi-postinstall wrapper
+      - name: 📋 Install project dependencies
         run: |
-          if [ -f "scripts/setup-napi-postinstall.js" ]; then
-            mkdir -p node_modules/.bin
-            node ./scripts/setup-napi-postinstall.js || true
-            chmod +x node_modules/.bin/napi-postinstall || true
-            echo "$(pwd)/node_modules/.bin" >> $GITHUB_PATH
-            # Also ensure global napi-postinstall is in PATH
-            export PATH="$PATH:$(npm config get prefix)/bin"
-          else
-            echo "⚠️  setup-napi-postinstall.js not found, skipping..."
-          fi
+          npm ci
 
-      - name: Run postinstall scripts
-        run: |
-          # Ensure napi-postinstall is available via npx
-          export PATH="$PATH:$(npm config get prefix)/bin"
-          # Run npm rebuild to trigger postinstall scripts for native modules
-          npm rebuild || echo "⚠️  npm rebuild had issues, continuing..."
-          # Run the project's postinstall script if it exists
-          if [ -f "package.json" ] && grep -q '"postinstall"' package.json; then
-            npm run postinstall || echo "⚠️  postinstall script had issues, continuing..."
-          fi
-
-      - name: Setup google-services.json
+      - name: 🔐 Setup google-services.json
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
@@ -79,57 +62,90 @@ jobs:
             echo "   To use real credentials, add GOOGLE_SERVICES_JSON secret in GitHub repository settings"
             echo '{"project_info":{"project_number":"000000000000","project_id":"tifto-seller-ci","storage_bucket":"tifto-seller-ci.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:000000000000:android:0000000000000000000000","android_client_info":{"package_name":"com.tifto.seller"}},"oauth_client":[],"api_key":[{"current_key":"AIzaSyDummyKeyForCIBuildOnly"}],"services":{"appinvite_service":{"other_platform_oauth_client":[]}}}],"configuration_version":"1"}' > google-services.json
           fi
+          # Copy to android directory as well
+          cp google-services.json android/app/google-services.json 2>/dev/null || true
 
-      - name: Install EAS CLI
-        run: npm install -g eas-cli
-
-      - name: Generate Android native code
+      - name: 🏗️ Generate Android native code
         run: npx expo prebuild --platform android --clean
 
-      - name: Fix react-native-worklets-core CMakeLists.txt
+      - name: 🔧 Fix react-native-worklets-core CMakeLists.txt
         run: |
           if [ -f "scripts/fix-worklets-cmake.js" ]; then
             echo "Running CMakeLists.txt fix script..."
             node ./scripts/fix-worklets-cmake.js || true
-            echo "Verifying patch was applied..."
-            if [ -f "node_modules/react-native-worklets-core/android/CMakeLists.txt" ]; then
-              if grep -q "PATCHED: React Native 0.79+ fix" node_modules/react-native-worklets-core/android/CMakeLists.txt; then
-                echo "✅ Patch verified successfully"
-              else
-                echo "⚠️  Patch marker not found, but continuing..."
-              fi
-            else
-              echo "⚠️  CMakeLists.txt not found (may be normal)"
-            fi
           else
             echo "⚠️  fix-worklets-cmake.js not found, skipping..."
           fi
 
-      - name: Configure Gradle
+      - name: 📝 Create local.properties
+        working-directory: ./android
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "✅ Created local.properties with SDK path: $ANDROID_HOME"
+
+      - name: 🔨 Configure Gradle
         working-directory: ./android
         run: |
           chmod +x gradlew
-          ./gradlew --version
+          ./gradlew --version || echo "Gradle version check completed"
 
-      - name: Build APK (Release)
+      - name: 🏭 Build Release APK
         working-directory: ./android
+        env:
+          NPM_CONFIG_LEGACY_PEER_DEPS: "true"
+          CI: "true"
         run: |
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon --stacktrace || {
+            echo "Build failed, showing last 100 lines of log..."
+            tail -100 build/reports/problems/problems-report.html || true
+            exit 1
+          }
 
-      - name: Upload APK artifact
+      - name: 📦 Find and verify APK
+        id: apk-info
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" -type f | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "❌ APK not found!"
+            echo "Checking for APK files in release directory:"
+            ls -la android/app/build/outputs/apk/release/ || true
+            exit 1
+          fi
+          APK_SIZE=$(stat -c%s "$APK_PATH" 2>/dev/null || stat -f%z "$APK_PATH" 2>/dev/null)
+          echo "apk-path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "apk-size=$APK_SIZE" >> $GITHUB_OUTPUT
+          echo "✅ Found APK: $APK_PATH"
+          echo "📦 APK Size: $(numfmt --to=iec-i --suffix=B $APK_SIZE 2>/dev/null || echo "${APK_SIZE} bytes")"
+
+      - name: 📤 Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: tifto-seller-app-release
-          path: android/app/build/outputs/apk/release/app-release.apk
-          retention-days: 30
+          path: ${{ steps.apk-info.outputs.apk-path }}
+          retention-days: 90
           if-no-files-found: error
 
-      - name: Get build info
+      - name: 📊 Build Summary
+        if: success()
+        run: |
+          echo "## ✅ Build Successful! 🎉" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**APK Location:** \`${{ steps.apk-info.outputs.apk-path }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**APK Size:** ${{ steps.apk-info.outputs.apk-size }} bytes" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📥 Download the APK from the Artifacts section above." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Details" >> $GITHUB_STEP_SUMMARY
+          echo "- App Name: Tifto Seller" >> $GITHUB_STEP_SUMMARY
+          echo "- Version: $(grep -o '"version": "[^"]*"' app.json | cut -d'"' -f4)" >> $GITHUB_STEP_SUMMARY
+          echo "- Version Code: $(grep -o '"versionCode": [0-9]*' app.json | grep -o '[0-9]*')" >> $GITHUB_STEP_SUMMARY
+          echo "- Package: com.tifto.seller" >> $GITHUB_STEP_SUMMARY
+
+      - name: ✅ Build completed
         if: success()
         run: |
           echo "✅ Build completed successfully!"
-          echo "APK location: android/app/build/outputs/apk/release/app-release.apk"
-          if [ -f "android/app/build/outputs/apk/release/app-release.apk" ]; then
-            ls -lh android/app/build/outputs/apk/release/app-release.apk
-          fi
+          echo "APK location: ${{ steps.apk-info.outputs.apk-path }}"
+          ls -lh "${{ steps.apk-info.outputs.apk-path }}" || true
 
